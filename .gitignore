@@ -1,0 +1,8 @@
+# FORMAT
+*.pyc
+*.csv
+*.rar
+*.zip
+
+# FOLDER
+/*/.idea/
