@@ -3,6 +3,11 @@
 *.csv
 *.rar
 *.zip
+*.model
+*.log
 
 # FOLDER
 /*/.idea/
+/*/log/
+/*/tensorflow_log/
+/*/tensorflow_model/

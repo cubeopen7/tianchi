@@ -5,6 +5,12 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from constant import *
+from sklearn.decomposition import PCA, FastICA
+from sklearn.preprocessing import StandardScaler
+
+
+random_seed = 420
+
 
 MISSING_COLUMNS = ['残疾军人医疗补助基金支付金额', '公务员医疗补助基金支付金额', '出院诊断病种名称', '补助审批金额', '城乡救助补助金额',
                    '一次性医用材料申报金额', '民政救助补助金额', '城乡优抚补助金额', '医疗救助医院申请', '本次审批金额']
@@ -183,7 +189,7 @@ if __name__ == "__main__":
 
     # # 造特征
     # get_feature(test)
-    # 用户特征
+    # # 用户特征
     def get_max(data, col):
         t_max = data[col].max().apply(lambda x: 0 if np.isnan(x) else x)
         t_max.index = [t + "_MAX" for t in t_max.index.tolist()]
@@ -218,83 +224,190 @@ if __name__ == "__main__":
         t.index = [s + "_MEAN" for s in t.index.tolist()]
         return t
 
-    data_info = [("train_1.csv", "user_train_id.csv"),
-                 ("test_1.csv", "user_test_id.csv")]
-    for read, save in data_info:
-        data_df = pd.read_csv(read, encoding="gbk")
-        data_df = data_df.fillna(0.0)
-        data_group= data_df.groupby("个人编码")
-        uid_list = []
-        for i, (uid, data) in enumerate(tqdm(data_group)):
-            # 1. 最大值-是否存在
-            t1 = get_max(data, FLAG_MAX)
-            t2 = get_flag(data, FLAG_MAX)
-            t = t1
-            t = t.append(t2)
-            # 2. 最大值-是否存在-和
-            t3 = get_max(data, FLAG_SUM_MAX)
-            t4 = get_sum(data, FLAG_SUM_MAX)
-            t5 = get_flag(data, FLAG_SUM_MAX)
-            t = t.append([t3, t4, t5])
-            # 3. 最大值-均值-和
-            t6 = get_max(data, SUM_MEAN_MAX)
-            t7 = get_sum(data, SUM_MEAN_MAX)
-            t8 = get_mean(data, SUM_MEAN_MAX)
-            t = t.append([t6, t7, t8])
-            # 4.是否存在-和-均值-最大值
-            t9 = get_flag(data, FLAG_SUM_MEAN_MAX)
-            t10 = get_max(data, FLAG_SUM_MEAN_MAX)
-            t11 = get_sum(data, FLAG_SUM_MEAN_MAX)
-            t12 = get_mean(data, FLAG_SUM_MEAN_MAX)
-            t = t.append([t9, t10, t11, t12])
-            # 5. 后创特征: 是否存在
-            t13 = get_flag(data, M_FLAG)
-            t = t.append(t13)
-            # 6. 后创特征: 均值-最小值
-            t14 = get_manual_mean(data, M_MEAN_MIN)
-            t15 = get_min(data, M_MEAN_MIN)
-            t = t.append([t14, t15])
-            # 7. 后创特征: 均值-最大值
-            t16 = get_manual_mean(data, M_MEAN_MAX)
-            t17 = get_max(data, M_MEAN_MAX)
-            t = t.append([t16, t17])
-            # 8. 后创特征: 正常均值
-            t18 = get_mean(data, M_MEAN_NORMAL)
-            t = t.append(t18)
-            # 9. 后创特征: 是否存在-和-最大值
-            t19 = get_flag(data, M_FLAG_SUM_MAX)
-            t20 = get_sum(data, M_FLAG_SUM_MAX)
-            t21 = get_max(data, M_FLAG_SUM_MAX)
-            t = t.append([t19, t20, t21])
-            # 10. 后创特征: 最大值-和-正常均值
-            t22 = get_mean(data, M_SUM_MAX_MEAN_NORMAL)
-            t23 = get_max(data, M_SUM_MAX_MEAN_NORMAL)
-            t24 = get_sum(data, M_SUM_MAX_MEAN_NORMAL)
-            t = t.append([t22, t23, t24])
-            # 11. 新特征: 顺序号数量, 顺序号最大时间间隔, 平均每日发生的数量
-            t25 = data.shape[0]
-            date_col = data["交易时间"].map(lambda x: datetime.datetime.strptime(x, "%Y-%m-%d"))
-            t26 = (date_col.max() - date_col.min()).days
-            t26 = t26 if t26 > 0 else 1
-            t27 = t25 / t26
-            t = t.append(pd.Series([t25, t26, t27], index=["顺序号数量", "顺序号最大时间间隔", "平均每日发生的数量"]))
-            # 12.新特征: 历史诊断疾病总数
-            disease_name_col = data["出院诊断病种名称"]
-            disease_str = ""
-            for s in disease_name_col:
-                if isinstance(s, float):
-                    continue
-                disease_str = disease_str + s + ";"
-            for s in ["，", ",", "；", " "]:
-                disease_str = disease_str.replace(s, ";")
-            disease_list = disease_str.split(";")
-            disease_list = list(set(disease_list))
-            t = t.append(pd.Series(len(disease_list), index=["历史诊断疾病总数"]))
-            # 用户ID
-            t = t.append(pd.Series(uid, index=["UID"]))
-            # 整理添加
-            if i == 0:
-                result_df = pd.DataFrame([list(t)], columns=t.index.tolist())
-            else:
-                result_df = result_df.append(t, ignore_index=True)
-        result_df.to_csv(save, index=False)
+    # data_info = [("train_1.csv", "user_train_id.csv"),
+    #              ("test_1.csv", "user_test_id.csv")]
+    # for read, save in data_info:
+    #     data_df = pd.read_csv(read, encoding="gbk")
+    #     data_df = data_df.fillna(0.0)
+    #     data_group= data_df.groupby("个人编码")
+    #     uid_list = []
+    #     for i, (uid, data) in enumerate(tqdm(data_group)):
+    #         # 1. 最大值-是否存在
+    #         t1 = get_max(data, FLAG_MAX)
+    #         t2 = get_flag(data, FLAG_MAX)
+    #         t = t1
+    #         t = t.append(t2)
+    #         # 2. 最大值-是否存在-和
+    #         t3 = get_max(data, FLAG_SUM_MAX)
+    #         t4 = get_sum(data, FLAG_SUM_MAX)
+    #         t5 = get_flag(data, FLAG_SUM_MAX)
+    #         t = t.append([t3, t4, t5])
+    #         # 3. 最大值-均值-和
+    #         t6 = get_max(data, SUM_MEAN_MAX)
+    #         t7 = get_sum(data, SUM_MEAN_MAX)
+    #         t8 = get_mean(data, SUM_MEAN_MAX)
+    #         t = t.append([t6, t7, t8])
+    #         # 4.是否存在-和-均值-最大值
+    #         t9 = get_flag(data, FLAG_SUM_MEAN_MAX)
+    #         t10 = get_max(data, FLAG_SUM_MEAN_MAX)
+    #         t11 = get_sum(data, FLAG_SUM_MEAN_MAX)
+    #         t12 = get_mean(data, FLAG_SUM_MEAN_MAX)
+    #         t = t.append([t9, t10, t11, t12])
+    #         # 5. 后创特征: 是否存在
+    #         t13 = get_flag(data, M_FLAG)
+    #         t = t.append(t13)
+    #         # 6. 后创特征: 均值-最小值
+    #         t14 = get_manual_mean(data, M_MEAN_MIN)
+    #         t15 = get_min(data, M_MEAN_MIN)
+    #         t = t.append([t14, t15])
+    #         # 7. 后创特征: 均值-最大值
+    #         t16 = get_manual_mean(data, M_MEAN_MAX)
+    #         t17 = get_max(data, M_MEAN_MAX)
+    #         t = t.append([t16, t17])
+    #         # 8. 后创特征: 正常均值
+    #         t18 = get_mean(data, M_MEAN_NORMAL)
+    #         t = t.append(t18)
+    #         # 9. 后创特征: 是否存在-和-最大值
+    #         t19 = get_flag(data, M_FLAG_SUM_MAX)
+    #         t20 = get_sum(data, M_FLAG_SUM_MAX)
+    #         t21 = get_max(data, M_FLAG_SUM_MAX)
+    #         t = t.append([t19, t20, t21])
+    #         # 10. 后创特征: 最大值-和-正常均值
+    #         t22 = get_mean(data, M_SUM_MAX_MEAN_NORMAL)
+    #         t23 = get_max(data, M_SUM_MAX_MEAN_NORMAL)
+    #         t24 = get_sum(data, M_SUM_MAX_MEAN_NORMAL)
+    #         t = t.append([t22, t23, t24])
+    #         # 11. 新特征: 顺序号数量, 顺序号最大时间间隔, 平均每日发生的数量
+    #         t25 = data.shape[0]
+    #         date_col = data["交易时间"].map(lambda x: datetime.datetime.strptime(x, "%Y-%m-%d"))
+    #         t26 = (date_col.max() - date_col.min()).days
+    #         t26 = t26 if t26 > 0 else 1
+    #         t27 = t25 / t26
+    #         t = t.append(pd.Series([t25, t26, t27], index=["顺序号数量", "顺序号最大时间间隔", "平均每日发生的数量"]))
+    #         # 12.新特征: 历史诊断疾病总数
+    #         disease_name_col = data["出院诊断病种名称"]
+    #         disease_str = ""
+    #         for s in disease_name_col:
+    #             if isinstance(s, float):
+    #                 continue
+    #             disease_str = disease_str + s + ";"
+    #         for s in ["，", ",", "；", " "]:
+    #             disease_str = disease_str.replace(s, ";")
+    #         disease_list = disease_str.split(";")
+    #         disease_list = list(set(disease_list))
+    #         t = t.append(pd.Series(len(disease_list), index=["历史诊断疾病总数"]))
+    #         # 用户ID
+    #         t = t.append(pd.Series(uid, index=["UID"]))
+    #         # 整理添加
+    #         if i == 0:
+    #             result_df = pd.DataFrame([list(t)], columns=t.index.tolist())
+    #         else:
+    #             result_df = result_df.append(t, ignore_index=True)
+    #     result_df.to_csv(save, index=False)
+
+    # 新特征
+    # # 1. 详细表统计特征
+    # detail = pd.read_csv("detail_result.csv", encoding="gbk")
+    # train = pd.read_csv("train_1.csv", encoding="gbk")
+    # train = train.merge(detail, how="left", on="顺序号")
+    # test = pd.read_csv("test_1.csv", encoding="gbk")
+    # test = test.merge(detail, how="left", on="顺序号")
+    # data_pair = [(train, "user_train_new.csv"), (test, "user_test_new.csv")]
+    # columns = ["详细数量", "详细均价", "详细最高价"]
+    # for input_data, output_data in data_pair:
+    #     group = input_data.groupby("个人编码")
+    #     for i, (uid, data) in enumerate(tqdm(group)):
+    #         t = pd.Series(uid, index=["UID"])
+    #         # # 1. 均值-最大值-最小值
+    #         # t1 = get_max(data, columns)
+    #         # t2 = get_min(data, columns)
+    #         # t3 = get_mean(data, columns)
+    #         # t = t.append([t1, t2, t3])
+    #         # # 2. 是否有隔天单行为
+    #         # t4 = get_flag(data, ["详细间隔日期"])
+    #         # t = t.append(t4)
+    #         # 2. 医院数量
+    #         hos_group = data[["个人编码", "医院编码"]].groupby("医院编码").count()
+    #         t5 = pd.Series(hos_group.shape[0], index=["就诊医院数量"])
+    #         t6 = pd.Series(hos_group["个人编码"].max() / data.shape[0], index=["最常去医院就诊比例"])
+    #         t7 = pd.Series(hos_group["个人编码"].min() / data.shape[0], index=["最少去医院就诊比例"])
+    #         t8 = hos_group["个人编码"].std() / data.shape[0]
+    #         t8 = pd.Series(0.0 if np.isnan(t8) else t8, index=["医院就诊次数标准差"])
+    #         t = t.append([t5, t6, t7, t8])
+    #         if i == 0:
+    #             result_df = pd.DataFrame([list(t)], columns=t.index.tolist())
+    #         else:
+    #             result_df = result_df.append(t, ignore_index=True)
+    #     result_df["UID"] = result_df["UID"].astype(np.int64)
+    #     result_df.to_csv(output_data, index=False)
+
+    # train_1 = pd.read_csv("user_train.csv", encoding="gbk")
+    # train_2 = pd.read_csv("user_train_new.csv", encoding="gbk")
+    # train_id = pd.read_csv("user_train_id.csv", encoding="gbk", header=None)
+    # train_id.columns = ["UID"]
+    # train = pd.concat([train_id, train_1], axis=1)
+    # train = train.merge(train_2, how="left", on="UID")
+    # train.to_csv("train_x.csv", index=False)
+
+    # test_1 = pd.read_csv("user_test.csv", encoding="gbk")
+    # test_2 = pd.read_csv("user_test_new.csv", encoding="gbk")
+    # test_id = pd.read_csv("user_test_id.csv", encoding="gbk", header=None)
+    # test_id.columns = ["UID"]
+    # test = pd.concat([test_id, test_1], axis=1)
+    # test = test.merge(test_2, how="left", on="UID")
+    # test.to_csv("test_x.csv", index=False)
+
+    # train_1 = pd.read_csv("train_x.csv", encoding="gbk")
+    # train_2 = pd.read_csv("user_train_new.csv", encoding="gbk")
+    # train_1 = train_1.merge(train_2, how="left", on="UID")
+    # train_1.to_csv("train_x_2.csv", index=False)
+    #
+    # test_1 = pd.read_csv("test_x.csv", encoding="gbk")
+    # test_2 = pd.read_csv("user_test_new.csv", encoding="gbk")
+    # test_1 = test_1.merge(test_2, how="left", on="UID")
+    # test_1.to_csv("test_x_2.csv", index=False)
+
+    # 消除inf异常值, 并清除常数列(特征只有一种数据, 无效特征)
+    train = pd.read_csv("train_x_2.csv", encoding="gbk")
+    test = pd.read_csv("test_x_2.csv", encoding="gbk")
+    train = train.replace(np.inf, 0)
+    test = test.replace(np.inf, 0)
+    for col in train.columns:
+        if len(train[col].unique()) < 2:
+            train.drop(col, axis=1, inplace=True)
+            test.drop(col, axis=1, inplace=True)
+    train.to_csv("train.csv", index=False)
+    test.to_csv("test.csv", index=False)
+
+    # # 合并疾病详细数据
+    # train = pd.read_csv("train.csv", encoding="gbk")
+    # test = pd.read_csv("test.csv", encoding="gbk")
+    # dis_train = pd.read_csv("disease_train.csv", encoding="gbk")
+    # dis_test = pd.read_csv("disease_test.csv", encoding="gbk")
+    # train = pd.concat([train, dis_train], axis=1)
+    # test = pd.concat([test, dis_test], axis=1)
+    # train.to_csv("train.csv", index=False)
+    # test.to_csv("test.csv", index=False)
+
+    # # 标准化处理, 并进行降维, 将降维数据作为新的特征
+    # train = pd.read_csv("train.csv", encoding="gbk")
+    # train_id, train = train[["UID"]], train.drop("UID", axis=1)
+    # test = pd.read_csv("test.csv", encoding="gbk")
+    # test_id, test = test[["UID"]], test.drop("UID", axis=1)
+    # std_model = StandardScaler()
+    # train_std = std_model.fit_transform(train)
+    # test_std = std_model.transform(test)
+    # pca_model = PCA(n_components=25, random_state=random_seed)
+    # train_pca = pca_model.fit_transform(train_std)
+    # test_pca = pca_model.transform(test_std)
+    # train_pca = pd.DataFrame(train_pca, columns=["PCA_" + str(i) for i in range(pca_model.n_components)])
+    # test_pca = pd.DataFrame(test_pca, columns=["PCA_" + str(i) for i in range(pca_model.n_components)])
+    # ica_model = FastICA(n_components=25, random_state=random_seed)
+    # train_ica = ica_model.fit_transform(train_std)
+    # test_ica = ica_model.transform(test_std)
+    # train_ica = pd.DataFrame(train_ica, columns=["ICA_" + str(i) for i in range(pca_model.n_components)])
+    # test_ica = pd.DataFrame(test_ica, columns=["ICA_" + str(i) for i in range(pca_model.n_components)])
+    # train = pd.concat([train_id, train, train_pca, train_ica], axis=1)
+    # test = pd.concat([test_id, test, test_pca, test_ica], axis=1)
+    # train.to_csv("train.csv", index=False)
+    # test.to_csv("test.csv", index=False)
