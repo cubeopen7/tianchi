@@ -119,7 +119,7 @@ if __name__ == "__main__":
                           n_estimators=12000,
                           subsample=0.9,  # 0.8
                           colsample_bytree=0.8,  # 0.9
-                          scale_pos_weight=13,  # 10
+                          scale_pos_weight=14,  # 10
                           objective="reg:logistic",
                           nthread=-1,
                           seed=random_seed)
@@ -129,15 +129,16 @@ if __name__ == "__main__":
     # params = {"max_depth": [3, 4, 5],
     #           "min_child_weight": [1, 10, 100],}
     # params = {"min_child_weight": [5, 7, 9, 10, 11, 13, 15]}
-    # # params = {"subsample": [0.7, 0.8, 0.9, 1],
-    # #           "colsample_bytree": [0.7, 0.8, 0.9, 1],}
-    # # params = {"reg_lambda": [0.1, 1, 10, 100]}
-    # # params = {"scale_pos_weight": [6, 8, 10, 12, 14, 16, 18]}
+    # params = {"subsample": [0.7, 0.8, 0.9, 1],
+    #           "colsample_bytree": [0.7, 0.8, 0.9, 1],}
+    # params = {"reg_lambda": [0.1, 1, 10, 100]}
+    # params = {"scale_pos_weight": [6, 8, 10, 12, 14, 16, 18]}
     # g_model = GridSearchCV(model, param_grid=params, scoring="f1", cv=5, n_jobs=-1, iid=False, verbose=0)
     # g_model.fit(train_x, train_y)
     # print(g_model.grid_scores_)
     # print(g_model.best_score_)
     # print(g_model.best_params_)
+    # log.info("Best parameter is {}, with score {}".format(g_model.best_params_, g_model.best_score_))
 
     model.fit(train_x, train_y)
     pred = model.predict(test_x)
